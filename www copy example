@@ -1,0 +1,81 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+const app = require("./app");
+const debug = require("debug")("name:server");
+const cluster = require("cluster");
+
+const { Worker, isMainThread } = require("worker_threads");
+const http = require("http");
+const numCPUs = require("os").cpus().length;
+
+const port = normalizePort(process.env.DEV_PORT || "3000");
+app.set("port", port);
+
+if (isMainThread) {
+  console.log(`Master ${process.pid} is running`);
+
+  // Fork workers using cluster module
+  if (cluster.isMaster) {
+    for (let i = 0; i < numCPUs; i++) {
+      cluster.fork();
+    }
+  }
+
+  cluster.on("exit", (worker, code, signal) => {
+    console.log(`worker ${worker.process.pid} died`);
+  });
+
+  // Create worker threads
+  const worker1 = new Worker("./worker.js");
+  const worker2 = new Worker("./worker.js");
+
+  worker1.on("message", (message) => {});
+
+  worker2.on("message", (message) => {});
+} else {
+  const server = http.createServer(app);
+
+  server.listen(port);
+  server.on("error", onError);
+  server.on("listening", onListening);
+}
+
+function normalizePort(val) {
+  const port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    return null;
+  }
+
+  return port;
+}
+
+function onError(error) {
+  if (error.syscall !== "listen") {
+    throw error;
+  }
+
+  const bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
+
+  switch (error.code) {
+    case "EACCES":
+      console.error(bind + " requires elevated privileges");
+      process.exit(1);
+      break;
+    case "EADDRINUSE":
+      console.error(bind + " is already in use");
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+function onListening() {
+  const addr = server.address();
+  const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
+  debug("Listening on " + bind);
+}
